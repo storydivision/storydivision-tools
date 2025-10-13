@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.8"
+# dependencies = []
+# ///
 """
 Trim silence from video/audio files and save as MP3.
 Supports MP4 and MP3 input files.
