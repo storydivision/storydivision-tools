@@ -1,0 +1,144 @@
+# StoryDivision Tools - Project Rules
+
+## Project Overview
+This is a collection of video creation, audio processing, and editing tools. Each tool is self-contained in its own subdirectory with complete documentation and dependencies.
+
+## Architecture Principles
+
+### Tool Organization
+- **One tool per subdirectory**: Each tool lives in its own directory (e.g., `silence_trimmer/`, `video_splitter/`)
+- **Self-contained**: Each tool directory contains everything needed to run that tool
+- **Independent**: Tools should not depend on each other; shared code should be minimal or duplicated if necessary
+
+### Python Standards
+- **UV Compatibility**: All Python scripts MUST be compatible with Astral UV for direct URL execution
+- **Shebang**: Always use `#!/usr/bin/env python3` as the first line
+- **pyproject.toml**: Every Python tool must have a `pyproject.toml` file with:
+  - Project name, version, and description
+  - `requires-python` specification (typically `>=3.8`)
+  - Dependencies list (even if empty: `dependencies = []`)
+- **Minimal dependencies**: Prefer standard library when possible; use external tools (ffmpeg, etc.) via subprocess
+
+### File Structure (Per Tool)
+```
+tool-name/
+├── README.md           # Comprehensive tool documentation
+├── pyproject.toml      # UV-compatible metadata
+├── main_script.py      # Primary executable (descriptive name)
+├── [optional files]    # Additional resources, examples, tests
+└── .venv/             # Local virtual environment (gitignored)
+```
+
+## Code Style
+
+### Python Scripts
+- **Executable**: Scripts should be directly runnable: `python script.py` or `./script.py`
+- **CLI-first**: Use `argparse` for command-line interfaces
+- **Docstrings**: Include module-level docstring explaining purpose
+- **Error handling**: Check for external dependencies (ffmpeg, etc.) and provide helpful error messages
+- **Type hints**: Use type hints for function parameters and returns when practical
+
+### Documentation
+- **Tool README**: Each tool needs its own README.md with:
+  - Clear description of what it does
+  - Installation/requirements
+  - Usage examples
+  - Options/parameters explanation
+- **Main README**: Keep the root README.md updated with new tools
+- **Examples**: Provide real-world usage examples
+
+## Development Workflow
+
+### Adding New Tools
+1. Create new subdirectory with descriptive name (use underscores)
+2. Add `pyproject.toml` with proper metadata
+3. Create main script with shebang and docstring
+4. Write comprehensive README.md
+5. Update root README.md to list the new tool
+6. Test with UV: `uv run tool-dir/script.py`
+
+### Dependencies
+- **External tools**: Document required external tools (ffmpeg, imagemagick, etc.)
+- **Python packages**: List in `pyproject.toml` dependencies array
+- **System requirements**: Note OS-specific requirements in README
+
+### Testing
+- Test scripts with UV before committing: `uv run script.py`
+- Verify scripts work without virtual environment
+- Check that all dependencies are documented
+
+## Best Practices
+
+### Code Quality
+- Keep scripts focused on single responsibility
+- Prefer simple, readable code over clever solutions
+- Use standard library when possible
+- Handle errors gracefully with helpful messages
+
+### User Experience
+- Provide `--help` documentation via argparse
+- Show progress for long-running operations
+- Validate inputs early and clearly
+- Give actionable error messages
+
+### Maintenance
+- Version tools independently in their pyproject.toml
+- Keep tool READMEs up to date
+- Document breaking changes
+- Maintain backward compatibility when possible
+
+## Technology Choices
+
+### Preferred
+- **Python 3.8+**: For broad compatibility
+- **Standard library**: subprocess, pathlib, argparse, etc.
+- **External CLI tools**: ffmpeg, imagemagick (via subprocess)
+- **UV**: For dependency management and direct execution
+
+### Avoid
+- Heavy frameworks for simple tools
+- Complex dependency chains
+- Platform-specific code without fallbacks
+- Hardcoded paths or assumptions
+
+## Examples
+
+### Minimal pyproject.toml
+```toml
+[project]
+name = "tool-name"
+version = "1.0.0"
+description = "Brief description"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+```
+
+### Script Template
+```python
+#!/usr/bin/env python3
+"""
+Brief description of what this tool does.
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Tool description")
+    parser.add_argument("input", help="Input file")
+    args = parser.parse_args()
+    
+    # Tool logic here
+    
+
+if __name__ == "__main__":
+    main()
+```
+
+## Notes
+- This is a living document; update as patterns emerge
+- Consistency across tools improves user experience
+- Simplicity and clarity trump cleverness

@@ -1,0 +1,7 @@
+[project]
+name = "silence-trimmer"
+version = "1.0.0"
+description = "Trim silence from video/audio files and save as MP3"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
