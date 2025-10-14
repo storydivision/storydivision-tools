@@ -1,6 +1,6 @@
 # Silence Trimmer
 
-Automatically trim silence from video and audio files and save as MP3. Works with MP4 and MP3 input files on Linux and macOS.
+A Python wrapper for ffmpeg that automatically trims silence from video and audio files. This tool uses ffmpeg's silence detection and removal filters to analyze and trim silence where it exists. Works with MP4 and MP3 input files on Linux and macOS.
 
 ## Features
 
@@ -26,6 +26,9 @@ sudo apt install ffmpeg
 
 # Linux (Fedora)
 sudo dnf install ffmpeg
+
+# Conda (any platform)
+conda install -c conda-forge ffmpeg
 ```
 
 ## Installation
@@ -95,6 +98,9 @@ python trim_silence.py video.mp4 --lossless aiff
 
 # Skip lossless output (MP3 only)
 python trim_silence.py video.mp4 --lossless none
+
+# JSON output for parsing by other tools
+python trim_silence.py video.mp4 --json
 ```
 
 ## Options
@@ -125,6 +131,7 @@ Other:
   -a, --aggressive      Remove silence throughout audio (default: only trim start/end)
                         WARNING: May cut into speech!
   -v, --verbose         Show detailed ffmpeg output
+  --json                Output results as JSON to STDOUT (suppresses all other output)
 ```
 
 ## Default Settings
@@ -186,7 +193,7 @@ python trim_silence.py video.mp4 --aggressive -m 0.4
 
 Processed files are saved to a `trimmed_output` folder in the source directory with `_trimmed` suffix. By default, both MP3 and WAV files are created.
 
-Example output:
+### Standard Output
 
 ```text
 Processing: video.mp4
@@ -196,17 +203,75 @@ Processing: video.mp4
   ✓ Removed 25.2s of silence (20.9%)
 ```
 
+### JSON Output (`--json`)
+
+When using `--json`, all output is formatted as JSON to STDOUT for easy parsing by other utilities:
+
+**Single file:**
+
+```json
+{
+  "input_file": "video.mp4",
+  "success": true,
+  "error": null,
+  "output_files": {
+    "mp3": "trimmed_output/video_trimmed.mp3",
+    "lossless": "trimmed_output/video_trimmed.wav",
+    "lossless_format": "wav"
+  },
+  "stats": {
+    "original_duration_seconds": 120.5,
+    "trimmed_duration_seconds": 95.3,
+    "time_saved_seconds": 25.2,
+    "percent_saved": 20.9
+  }
+}
+```
+
+**Directory batch processing:**
+
+```json
+{
+  "input_directory": "./videos",
+  "success": true,
+  "error": null,
+  "files": [
+    {
+      "input_file": "video1.mp4",
+      "success": true,
+      "error": null,
+      "output_files": { "mp3": "...", "lossless": "..." },
+      "stats": { "original_duration_seconds": 120.5, ... }
+    },
+    {
+      "input_file": "video2.mp4",
+      "success": true,
+      "error": null,
+      "output_files": { "mp3": "...", "lossless": "..." },
+      "stats": { "original_duration_seconds": 85.2, ... }
+    }
+  ],
+  "summary": {
+    "total_files": 2,
+    "successful": 2,
+    "failed": 0
+  }
+}
+```
+
 ## How It Works
 
+This tool is a simple Python wrapper around ffmpeg's built-in silence detection and removal capabilities. All the heavy lifting is done by ffmpeg itself.
+
 ### Safe Mode (Default)
-Uses FFmpeg's `silenceremove` filter to trim silence from start and end only.
+Uses ffmpeg's `silenceremove` filter to trim silence from start and end only.
 
 ### Aggressive Mode
-Uses a multi-step FFmpeg approach:
+Uses a multi-step ffmpeg approach:
 
-1. **Detect**: Uses `silencedetect` to find all silence periods
+1. **Detect**: Uses ffmpeg's `silencedetect` filter to find all silence periods
 2. **Extract**: Cuts out non-silent segments with `-c copy` (fast!)
-3. **Concatenate**: Joins segments back together
+3. **Concatenate**: Joins segments back together using ffmpeg's concat demuxer
 4. **Export**: Outputs as MP3 and lossless WAV/AIFF
 
 ## License

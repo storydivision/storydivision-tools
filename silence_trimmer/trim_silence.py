@@ -9,12 +9,13 @@ Supports MP4 and MP3 input files.
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def check_ffmpeg():
@@ -354,16 +355,35 @@ def trim_silence(
 def process_file(
     input_file: Path,
     output_dir: Optional[Path] = None,
+    json_mode: bool = False,
     **kwargs
-) -> bool:
-    """Process a single file."""
+) -> Dict:
+    """Process a single file.
+    
+    Returns:
+        Dictionary with processing results (for JSON mode) or success status
+    """
+    result = {
+        "input_file": str(input_file),
+        "success": False,
+        "error": None,
+        "output_files": {},
+        "stats": {}
+    }
+    
     if not input_file.exists():
-        print(f"Error: File not found: {input_file}")
-        return False
+        error_msg = f"File not found: {input_file}"
+        if not json_mode:
+            print(f"Error: {error_msg}")
+        result["error"] = error_msg
+        return result
     
     if input_file.suffix.lower() not in ['.mp4', '.mp3']:
-        print(f"Skipping {input_file}: Not an MP4 or MP3 file")
-        return False
+        error_msg = "Not an MP4 or MP3 file"
+        if not json_mode:
+            print(f"Skipping {input_file}: {error_msg}")
+        result["error"] = error_msg
+        return result
     
     # Determine output directory
     if output_dir is None:
@@ -374,7 +394,8 @@ def process_file(
     # Create output filename
     output_file = output_dir / f"{input_file.stem}_trimmed.mp3"
     
-    print(f"Processing: {input_file.name}")
+    if not json_mode:
+        print(f"Processing: {input_file.name}")
     
     # Get original duration
     original_duration = get_audio_duration(input_file)
@@ -386,58 +407,108 @@ def process_file(
         # Get new duration
         new_duration = get_audio_duration(output_file)
         
+        result["success"] = True
+        result["output_files"]["mp3"] = str(output_file)
+        
         if original_duration > 0:
             time_saved = original_duration - new_duration
             percent_saved = (time_saved / original_duration) * 100
-            print(f"  ✓ MP3 saved to: {output_file}")
+            
+            result["stats"] = {
+                "original_duration_seconds": round(original_duration, 2),
+                "trimmed_duration_seconds": round(new_duration, 2),
+                "time_saved_seconds": round(time_saved, 2),
+                "percent_saved": round(percent_saved, 2)
+            }
+            
+            if not json_mode:
+                print(f"  ✓ MP3 saved to: {output_file}")
             
             # Show lossless file if created
             lossless_format = kwargs.get('lossless_format')
             if lossless_format:
                 lossless_file = output_dir / f"{input_file.stem}_trimmed.{lossless_format}"
-                print(f"  ✓ {lossless_format.upper()} saved to: {lossless_file}")
+                result["output_files"]["lossless"] = str(lossless_file)
+                result["output_files"]["lossless_format"] = lossless_format
+                if not json_mode:
+                    print(f"  ✓ {lossless_format.upper()} saved to: {lossless_file}")
             
-            print(f"  ✓ Original: {original_duration:.1f}s → Trimmed: {new_duration:.1f}s")
-            print(f"  ✓ Removed {time_saved:.1f}s of silence ({percent_saved:.1f}%)")
+            if not json_mode:
+                print(f"  ✓ Original: {original_duration:.1f}s → Trimmed: {new_duration:.1f}s")
+                print(f"  ✓ Removed {time_saved:.1f}s of silence ({percent_saved:.1f}%)")
         else:
-            print(f"  ✓ Saved to: {output_file}")
+            if not json_mode:
+                print(f"  ✓ Saved to: {output_file}")
+    else:
+        result["error"] = "Processing failed"
     
-    return success
+    return result
 
 
 def process_directory(
     input_dir: Path,
     output_dir: Optional[Path] = None,
+    json_mode: bool = False,
     **kwargs
-) -> tuple[int, int]:
+) -> Dict:
     """
     Process all MP4 and MP3 files in a directory.
     
     Returns:
-        Tuple of (successful_count, total_count)
+        Dictionary with processing results for all files
     """
+    result = {
+        "input_directory": str(input_dir),
+        "success": False,
+        "error": None,
+        "files": [],
+        "summary": {
+            "total_files": 0,
+            "successful": 0,
+            "failed": 0
+        }
+    }
+    
     if not input_dir.is_dir():
-        print(f"Error: Not a directory: {input_dir}")
-        return 0, 0
+        error_msg = f"Not a directory: {input_dir}"
+        if not json_mode:
+            print(f"Error: {error_msg}")
+        result["error"] = error_msg
+        return result
     
     # Find all MP4 and MP3 files
     files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.mp3"))
     files += list(input_dir.glob("*.MP4")) + list(input_dir.glob("*.MP3"))
     
     if not files:
-        print(f"No MP4 or MP3 files found in {input_dir}")
-        return 0, 0
+        error_msg = f"No MP4 or MP3 files found in {input_dir}"
+        if not json_mode:
+            print(error_msg)
+        result["error"] = error_msg
+        return result
     
-    print(f"Found {len(files)} file(s) to process\n")
+    if not json_mode:
+        print(f"Found {len(files)} file(s) to process\n")
     
-    successful = 0
+    result["summary"]["total_files"] = len(files)
+    
     for i, file in enumerate(files, 1):
-        print(f"[{i}/{len(files)}]", end=" ")
-        if process_file(file, output_dir, **kwargs):
-            successful += 1
-        print()  # Empty line between files
+        if not json_mode:
+            print(f"[{i}/{len(files)}]", end=" ")
+        
+        file_result = process_file(file, output_dir, json_mode=json_mode, **kwargs)
+        result["files"].append(file_result)
+        
+        if file_result["success"]:
+            result["summary"]["successful"] += 1
+        else:
+            result["summary"]["failed"] += 1
+        
+        if not json_mode:
+            print()  # Empty line between files
     
-    return successful, len(files)
+    result["success"] = result["summary"]["failed"] == 0
+    return result
 
 
 def main():
@@ -530,6 +601,11 @@ Examples:
         action="store_true",
         help="Show detailed ffmpeg output"
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON to STDOUT (suppresses all other output)"
+    )
     
     args = parser.parse_args()
     
@@ -551,20 +627,31 @@ Examples:
     
     # Process based on input type
     if args.directory:
-        successful, total = process_directory(
+        result = process_directory(
             args.directory,
             args.output,
+            json_mode=args.json,
             **process_kwargs
         )
-        print(f"\nCompleted: {successful}/{total} files processed successfully")
-        sys.exit(0 if successful == total else 1)
+        
+        if args.json:
+            print(json.dumps(result, indent=2))
+            sys.exit(0 if result["success"] else 1)
+        else:
+            print(f"\nCompleted: {result['summary']['successful']}/{result['summary']['total_files']} files processed successfully")
+            sys.exit(0 if result["success"] else 1)
     else:
-        success = process_file(
+        result = process_file(
             args.input_file,
             args.output,
+            json_mode=args.json,
             **process_kwargs
         )
-        sys.exit(0 if success else 1)
+        
+        if args.json:
+            print(json.dumps(result, indent=2))
+        
+        sys.exit(0 if result["success"] else 1)
 
 
 if __name__ == "__main__":
