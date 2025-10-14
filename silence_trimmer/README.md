@@ -105,13 +105,21 @@ python trim_silence.py video.mp4 -b 320k
 python trim_silence.py video.mp4 -v
 
 # Output AIFF instead of WAV
-python trim_silence.py video.mp4 --lossless aiff
+python trim_silence.py video.mp4 -l aiff
 
 # Skip lossless output (MP3 only)
-python trim_silence.py video.mp4 --lossless none
+python trim_silence.py video.mp4 -l none
+
+# Normalize speech levels before trimming (uses loudnorm by default)
+python trim_silence.py audio.m4a --normalize
+# Or shorthand:
+python trim_silence.py audio.m4a -n
+
+# Use dynamic normalization (faster)
+python trim_silence.py audio.m4a -n dynaudnorm
 
 # JSON output for parsing by other tools
-python trim_silence.py video.mp4 --json
+python trim_silence.py video.mp4 -j
 ```
 
 ## Options
@@ -130,19 +138,25 @@ Silence Detection:
                         Lower = stricter. Try -30 to -50
   -m, --min-duration S  Minimum silence duration in seconds (default: 0.2)
                         Only used in aggressive mode
-  -p, --padding S       Padding to keep around speech in seconds (default: 0.1)
+  -p, --padding S       Padding to keep around speech in seconds (default: 0.2)
   
 Quality:
   -b, --bitrate RATE    Output MP3 bitrate (default: 128k)
                         Options: 128k, 192k, 320k
-  --lossless FORMAT     Lossless format alongside MP3 (default: wav)
+  -l, --lossless FORMAT Lossless format alongside MP3 (default: wav)
                         Options: wav, aiff, none
   
 Other:
   -a, --aggressive      Remove silence throughout audio (default: only trim start/end)
                         WARNING: May cut into speech!
+  -n, --normalize [METHOD]
+                        Apply audio normalization before silence detection.
+                        Options: loudnorm (default, EBU R128 standard),
+                                 dynaudnorm (faster, dynamic)
+                        Use -n alone for loudnorm, or -n dynaudnorm
+                        Recommended for speech/voice content
   -v, --verbose         Show detailed ffmpeg output
-  --json                Output results as JSON to STDOUT (suppresses all other output)
+  -j, --json            Output results as JSON to STDOUT (suppresses all other output)
 ```
 
 ## Default Settings
@@ -152,9 +166,62 @@ The defaults work well for 80% of use cases:
 - **Mode**: Safe (only trims silence from start and end)
 - **Silence threshold**: -30dB (catches background noise and rustling)
 - **Min silence duration**: 0.2 seconds (only used in aggressive mode)
-- **Padding**: 0.1 seconds (keeps natural flow)
+- **Padding**: 0.2 seconds (keeps natural flow and prevents cutting word endings)
 - **MP3 bitrate**: 128kbps (good quality/size balance)
 - **Lossless output**: WAV (full quality alongside MP3)
+
+## Audio Normalization
+
+The `--normalize` (or `-n`) flag applies audio normalization **before** silence detection. This is highly recommended for speech/voice content because:
+
+- **Consistent levels**: Normalizes volume across the entire recording
+- **Better silence detection**: Makes it easier to distinguish speech from silence
+- **Professional sound**: Evens out quiet and loud sections
+
+### Normalization Methods
+
+**`loudnorm` (Default - Recommended)**
+
+- EBU R128 loudness normalization standard
+- Industry standard for broadcast and streaming platforms
+- Best for: Podcasts, professional content, anything being published
+- Usage: `-n` or `-n loudnorm`
+
+**`dynaudnorm` (Alternative)**
+
+- Dynamic audio normalizer
+- Faster processing, simpler algorithm
+- Best for: Quick processing, general use
+- Usage: `-n dynaudnorm`
+
+**Examples:**
+
+```bash
+# Use loudnorm (default, best for speech)
+python trim_silence.py interview.m4a -n
+
+# Explicitly specify loudnorm
+python trim_silence.py interview.m4a -n loudnorm
+
+# Use dynaudnorm (faster)
+python trim_silence.py interview.m4a -n dynaudnorm
+```
+
+The normalization is applied first, then silence trimming happens on the normalized audio. This two-step process produces better results for voice recordings.
+
+### Loudness Statistics (loudnorm only)
+
+When using `loudnorm`, detailed loudness measurements are included in the JSON output:
+
+- **input_i**: Input Integrated Loudness (LUFS) - the original loudness level
+- **input_tp**: Input True Peak (dBTP) - the highest peak in the original
+- **input_lra**: Input Loudness Range (LU) - dynamic range of the original
+- **output_i**: Output Integrated Loudness (LUFS) - the normalized loudness level
+- **output_tp**: Output True Peak (dBTP) - the highest peak after normalization
+- **output_lra**: Output Loudness Range (LU) - dynamic range after normalization
+- **target_offset**: How much gain was applied (in LU - Loudness Units)
+
+These measurements help you understand exactly what the normalization did to your audio and ensure it meets broadcast/streaming standards.
 
 ## Modes
 
@@ -234,7 +301,17 @@ When using `--json`, all output is formatted as JSON to STDOUT for easy parsing 
     "original_duration_seconds": 120.5,
     "trimmed_duration_seconds": 95.3,
     "time_saved_seconds": 25.2,
-    "percent_saved": 20.9
+    "percent_saved": 20.9,
+    "normalization": "loudnorm",
+    "loudness": {
+      "input_i": "-26.5",
+      "input_tp": "-4.8",
+      "input_lra": "5.3",
+      "output_i": "-24.7",
+      "output_tp": "-4.3",
+      "output_lra": "3.9",
+      "target_offset": "+0.7"
+    }
   }
 }
 ```

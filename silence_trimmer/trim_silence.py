@@ -35,6 +35,43 @@ def check_ffmpeg():
         sys.exit(1)
 
 
+def parse_loudnorm_stats(stderr_output: str) -> Optional[Dict]:
+    """
+    Parse loudness normalization statistics from ffmpeg stderr output.
+    
+    Args:
+        stderr_output: The stderr output from ffmpeg with loudnorm filter
+        
+    Returns:
+        Dictionary with loudness statistics or None if parsing fails
+    """
+    try:
+        stats = {}
+        lines = stderr_output.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if 'Input Integrated:' in line:
+                stats['input_i'] = line.split(':')[1].strip().replace(' LUFS', '')
+            elif 'Input True Peak:' in line:
+                stats['input_tp'] = line.split(':')[1].strip().replace(' dBTP', '')
+            elif 'Input LRA:' in line:
+                stats['input_lra'] = line.split(':')[1].strip().replace(' LU', '')
+            elif 'Output Integrated:' in line:
+                stats['output_i'] = line.split(':')[1].strip().replace(' LUFS', '')
+            elif 'Output True Peak:' in line:
+                stats['output_tp'] = line.split(':')[1].strip().replace(' dBTP', '')
+            elif 'Output LRA:' in line:
+                stats['output_lra'] = line.split(':')[1].strip().replace(' LU', '')
+            elif 'Target Offset:' in line:
+                stats['target_offset'] = line.split(':')[1].strip().replace(' LU', '')
+        
+        # Only return if we got at least some stats
+        return stats if stats else None
+    except Exception:
+        return None
+
+
 def get_audio_duration(file_path: Path) -> float:
     """Get duration of audio/video file in seconds."""
     cmd = [
@@ -120,7 +157,7 @@ def remove_silences_ffmpeg(
     bitrate: str,
     verbose: bool,
     lossless_format: Optional[str]
-) -> bool:
+) -> Tuple[bool, Optional[Dict]]:
     """
     Remove silences using FFmpeg multi-command approach.
     
@@ -129,6 +166,10 @@ def remove_silences_ffmpeg(
     2. Calculate non-silent segments (with padding)
     3. Extract each segment
     4. Concatenate segments
+    
+    Returns:
+        Tuple of (success: bool, loudness_stats: Optional[Dict])
+        Note: Aggressive mode doesn't support loudness stats
     """
     # Step 1: Detect silences
     if verbose:
@@ -150,7 +191,7 @@ def remove_silences_ffmpeg(
                 "ffmpeg", "-i", str(input_file),
                 "-y", str(lossless_file)
             ], check=True, capture_output=not verbose)
-        return True
+        return True, None
     
     if verbose:
         print(f"Found {len(silences)} silence periods")
@@ -177,7 +218,7 @@ def remove_silences_ffmpeg(
     
     if not segments:
         print("Warning: No segments to keep after silence removal")
-        return False
+        return False, None
     
     if verbose:
         print(f"\nKeeping {len(segments)} segments:")
@@ -234,7 +275,7 @@ def remove_silences_ffmpeg(
             ]
             subprocess.run(lossless_cmd, check=True, capture_output=not verbose)
     
-    return True
+    return True, None
 
 
 def trim_silence(
@@ -242,12 +283,13 @@ def trim_silence(
     output_file: Path,
     silence_threshold: int = -30,
     min_silence_duration: float = 0.2,
-    padding: float = 0.1,
+    padding: float = 0.2,
     bitrate: str = "128k",
     verbose: bool = False,
     aggressive: bool = False,
-    lossless_format: Optional[str] = "wav"
-) -> bool:
+    lossless_format: Optional[str] = "wav",
+    normalize: Optional[str] = None
+) -> Tuple[bool, Optional[Dict]]:
     """
     Trim silence from audio/video file and save as MP3.
     
@@ -261,9 +303,10 @@ def trim_silence(
         verbose: Print ffmpeg output
         aggressive: If True, remove silence throughout. If False, only trim start/end
         lossless_format: Format for lossless output ("wav", "aiff", or None to skip)
+        normalize: Normalization method ("loudnorm", "dynaudnorm", or None to skip)
         
     Returns:
-        True if successful, False otherwise
+        Tuple of (success: bool, loudness_stats: Optional[Dict])
     """
     # Build ffmpeg command with silenceremove filter
     # Default: only remove silence from start and end (stop_periods=1)
@@ -284,11 +327,29 @@ def trim_silence(
         )
     else:
         # Only trim silence from start and end using areverse trick
-        # Use a less strict threshold for end trimming to catch background noise/rustling
+        # Use a LESS strict threshold for end trimming to avoid cutting off word endings
         # This is more reliable than stop_periods=1
-        end_threshold = max(silence_threshold, -35)  # At least -35dB for end (catches more noise)
+        end_threshold = min(silence_threshold, -35)  # At most -35dB for end (less aggressive)
         
-        audio_filter = (
+        # Build audio filter chain
+        filters = []
+        
+        # Add normalization if requested (applied FIRST)
+        loudness_stats = None
+        if normalize:
+            if normalize == "loudnorm":
+                # EBU R128 loudness normalization (industry standard for broadcast/streaming)
+                # Use print_format=summary to get loudness measurements
+                filters.append("loudnorm=print_format=summary")
+            elif normalize == "dynaudnorm":
+                # Dynamic audio normalizer (faster, simpler)
+                filters.append("dynaudnorm")
+            else:
+                # Invalid normalize value, skip
+                pass
+        
+        # Add silence removal filters
+        silence_filter = (
             f"silenceremove="
             f"start_periods=1:"
             f"start_threshold={silence_threshold}dB:"
@@ -300,6 +361,10 @@ def trim_silence(
             f"start_silence={padding},"
             f"areverse"
         )
+        filters.append(silence_filter)
+        
+        # Join filters with comma
+        audio_filter = ",".join(filters)
     
     cmd = [
         "ffmpeg",
@@ -314,14 +379,19 @@ def trim_silence(
         # Process MP3
         if verbose:
             print(f"Running: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         else:
-            subprocess.run(
+            result = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                check=True
+                check=True,
+                text=True
             )
+        
+        # Parse loudness stats if using loudnorm
+        if normalize == "loudnorm":
+            loudness_stats = parse_loudnorm_stats(result.stderr)
         
         # Also create lossless version if requested
         if lossless_format:
@@ -344,12 +414,12 @@ def trim_silence(
                     check=True
                 )
         
-        return True
+        return True, loudness_stats
     except subprocess.CalledProcessError as e:
         print(f"Error processing {input_file}: {e}")
         if verbose and e.stderr:
-            print(e.stderr.decode())
-        return False
+            print(e.stderr if isinstance(e.stderr, str) else e.stderr.decode())
+        return False, None
 
 
 def process_file(
@@ -412,7 +482,7 @@ def process_file(
     original_duration = get_audio_duration(input_file)
     
     # Process the file
-    success = trim_silence(input_file, output_file, **kwargs)
+    success, loudness_stats = trim_silence(input_file, output_file, **kwargs)
     
     if success:
         # Get new duration
@@ -429,8 +499,13 @@ def process_file(
                 "original_duration_seconds": round(original_duration, 2),
                 "trimmed_duration_seconds": round(new_duration, 2),
                 "time_saved_seconds": round(time_saved, 2),
-                "percent_saved": round(percent_saved, 2)
+                "percent_saved": round(percent_saved, 2),
+                "normalization": kwargs.get('normalize') if kwargs.get('normalize') else None
             }
+            
+            # Add loudness stats if available
+            if loudness_stats:
+                result["stats"]["loudness"] = loudness_stats
             
             if not json_mode:
                 print(f"  ✓ MP3 saved to: {output_file}")
@@ -595,8 +670,8 @@ Examples:
     parser.add_argument(
         "-p", "--padding",
         type=float,
-        default=0.1,
-        help="Padding to keep around speech in seconds (default: 0.1)"
+        default=0.2,
+        help="Padding to keep around speech in seconds (default: 0.2)"
     )
     
     # Quality options
@@ -608,7 +683,7 @@ Examples:
     
     # Lossless output options
     parser.add_argument(
-        "--lossless",
+        "-l", "--lossless",
         choices=["wav", "aiff", "none"],
         default="wav",
         help="Lossless format to create alongside MP3 (default: wav). Use 'none' to skip"
@@ -621,12 +696,26 @@ Examples:
         help="Remove silence throughout audio (default: only trim start/end). WARNING: May cut speech!"
     )
     parser.add_argument(
+        "-n", "--normalize",
+        type=str,
+        nargs="?",
+        const="loudnorm",
+        default=None,
+        choices=["loudnorm", "dynaudnorm"],
+        metavar="METHOD",
+        help="Apply audio normalization before silence detection. "
+             "Options: loudnorm (default, EBU R128 standard for broadcast/streaming), "
+             "dynaudnorm (faster, dynamic normalization). "
+             "Use -n alone for loudnorm, or -n dynaudnorm for dynamic. "
+             "Recommended for speech/voice content."
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Show detailed ffmpeg output"
     )
     parser.add_argument(
-        "--json",
+        "-j", "--json",
         action="store_true",
         help="Output results as JSON to STDOUT (suppresses all other output)"
     )
@@ -647,6 +736,7 @@ Examples:
         "verbose": args.verbose,
         "aggressive": args.aggressive,
         "lossless_format": lossless_format,
+        "normalize": args.normalize,
     }
     
     # Process based on input type
