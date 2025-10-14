@@ -1,10 +1,11 @@
 # Silence Trimmer
 
-A Python wrapper for ffmpeg that automatically trims silence from video and audio files. This tool uses ffmpeg's silence detection and removal filters to analyze and trim silence where it exists. Works with MP4 and MP3 input files on Linux and macOS.
+A Python wrapper for ffmpeg that automatically trims silence from video and audio files. This tool uses ffmpeg's silence detection and removal filters to analyze and trim silence where it exists. Works with all common audio and video formats that ffmpeg supports on Linux and macOS.
 
 ## Features
 
-- 🎬 Process MP4 videos and MP3 audio files
+- 🎬 Process all common video formats (MP4, MKV, AVI, MOV, WebM, FLV, etc.)
+- 🎵 Process all common audio formats (MP3, M4A, FLAC, WAV, AAC, OGG, OPUS, etc.)
 - 🔇 Intelligent silence detection and removal
 - 📁 Batch process entire directories
 - ⚙️ Customizable silence thresholds and padding
@@ -12,6 +13,16 @@ A Python wrapper for ffmpeg that automatically trims silence from video and audi
 - 🚀 Works with `uv` for fast execution
 - 🎯 Two modes: safe (trim start/end only) or aggressive (remove all silence)
 - 🎵 Outputs both MP3 and lossless (WAV/AIFF) by default
+
+## Supported Formats
+
+This tool supports all common audio and video formats that ffmpeg can process:
+
+**Video formats:** MP4, MKV, AVI, MOV, WMV, FLV, WebM, M4V, MPG, MPEG, 3GP, OGV, TS, MTS, M2TS, VOB, ASF, RM, RMVB, DivX
+
+**Audio formats:** MP3, M4A, AAC, WAV, FLAC, OGG, OPUS, WMA, AIFF, APE, AC3, DTS, ALAC, AMR, AU, CAF, MKA, OGA, RA, WV, TTA, TAK, MPC, DSF, DFF
+
+All files are processed and output as MP3 (plus optional lossless WAV/AIFF).
 
 ## Prerequisites
 
@@ -107,11 +118,11 @@ python trim_silence.py video.mp4 --json
 
 ```text
 positional arguments:
-  input_file            Input file (MP4 or MP3)
+  input_file            Input audio or video file (supports most common formats)
 
 optional arguments:
   -h, --help            Show help message
-  -d, --directory DIR   Process all MP4/MP3 files in directory
+  -d, --directory DIR   Process all supported audio/video files in directory
   -o, --output DIR      Output directory (default: creates 'trimmed_output' in source location)
   
 Silence Detection:

@@ -5,7 +5,7 @@
 # ///
 """
 Trim silence from video/audio files and save as MP3.
-Supports MP4 and MP3 input files.
+Supports common audio and video formats that ffmpeg can process.
 """
 
 import argparse
@@ -378,8 +378,19 @@ def process_file(
         result["error"] = error_msg
         return result
     
-    if input_file.suffix.lower() not in ['.mp4', '.mp3']:
-        error_msg = "Not an MP4 or MP3 file"
+    # Common audio and video formats supported by ffmpeg
+    supported_extensions = {
+        # Video formats
+        '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg',
+        '.3gp', '.ogv', '.ts', '.mts', '.m2ts', '.vob', '.asf', '.rm', '.rmvb', '.divx',
+        # Audio formats
+        '.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg', '.opus', '.wma', '.aiff', '.ape',
+        '.ac3', '.dts', '.alac', '.amr', '.au', '.caf', '.mka', '.oga', '.ra', '.wv',
+        '.tta', '.tak', '.mpc', '.dsf', '.dff'
+    }
+    
+    if input_file.suffix.lower() not in supported_extensions:
+        error_msg = f"Unsupported file format: {input_file.suffix}"
         if not json_mode:
             print(f"Skipping {input_file}: {error_msg}")
         result["error"] = error_msg
@@ -476,12 +487,25 @@ def process_directory(
         result["error"] = error_msg
         return result
     
-    # Find all MP4 and MP3 files
-    files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.mp3"))
-    files += list(input_dir.glob("*.MP4")) + list(input_dir.glob("*.MP3"))
+    # Find all supported audio and video files
+    supported_patterns = [
+        # Video formats
+        '*.mp4', '*.mkv', '*.avi', '*.mov', '*.wmv', '*.flv', '*.webm', '*.m4v',
+        '*.mpg', '*.mpeg', '*.3gp', '*.ogv', '*.ts', '*.mts', '*.m2ts', '*.vob',
+        '*.asf', '*.rm', '*.rmvb', '*.divx',
+        # Audio formats
+        '*.mp3', '*.m4a', '*.aac', '*.wav', '*.flac', '*.ogg', '*.opus', '*.wma',
+        '*.aiff', '*.ape', '*.ac3', '*.dts', '*.alac', '*.amr', '*.au', '*.caf',
+        '*.mka', '*.oga', '*.ra', '*.wv', '*.tta', '*.tak', '*.mpc', '*.dsf', '*.dff'
+    ]
+    
+    files = []
+    for pattern in supported_patterns:
+        files.extend(input_dir.glob(pattern))
+        files.extend(input_dir.glob(pattern.upper()))
     
     if not files:
-        error_msg = f"No MP4 or MP3 files found in {input_dir}"
+        error_msg = f"No supported audio/video files found in {input_dir}"
         if not json_mode:
             print(error_msg)
         result["error"] = error_msg
@@ -540,12 +564,12 @@ Examples:
         "input_file",
         nargs="?",
         type=Path,
-        help="Input file (MP4 or MP3)"
+        help="Input audio or video file (supports most common formats: MP4, MKV, AVI, MOV, MP3, M4A, FLAC, WAV, etc.)"
     )
     input_group.add_argument(
         "-d", "--directory",
         type=Path,
-        help="Process all MP4/MP3 files in directory"
+        help="Process all supported audio/video files in directory"
     )
     
     # Output options
