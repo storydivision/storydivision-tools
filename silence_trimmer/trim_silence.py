@@ -338,9 +338,10 @@ def trim_silence(
         loudness_stats = None
         if normalize:
             if normalize == "loudnorm":
-                # EBU R128 loudness normalization (industry standard for broadcast/streaming)
-                # Use print_format=summary to get loudness measurements
-                filters.append("loudnorm=print_format=summary")
+                # EBU R128 loudness normalization optimized for streaming platforms
+                # Target -16 LUFS (close to YouTube's -14 LUFS) instead of broadcast -24 LUFS
+                # This makes content significantly louder and competitive with other YouTube videos
+                filters.append("loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary")
             elif normalize == "dynaudnorm":
                 # Dynamic audio normalizer (faster, simpler)
                 filters.append("dynaudnorm")

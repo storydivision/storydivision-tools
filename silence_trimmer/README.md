@@ -183,8 +183,10 @@ The `--normalize` (or `-n`) flag applies audio normalization **before** silence 
 **`loudnorm` (Default - Recommended)**
 
 - EBU R128 loudness normalization standard
-- Industry standard for broadcast and streaming platforms
-- Best for: Podcasts, professional content, anything being published
+- **Optimized for streaming platforms** (YouTube, Spotify, etc.)
+- Targets **-16 LUFS** (competitive with typical YouTube videos)
+- Much louder than broadcast standard (-24 LUFS)
+- Best for: YouTube, podcasts, social media, any online content
 - Usage: `-n` or `-n loudnorm`
 
 **`dynaudnorm` (Alternative)**
@@ -216,12 +218,24 @@ When using `loudnorm`, detailed loudness measurements are included in the JSON o
 - **input_i**: Input Integrated Loudness (LUFS) - the original loudness level
 - **input_tp**: Input True Peak (dBTP) - the highest peak in the original
 - **input_lra**: Input Loudness Range (LU) - dynamic range of the original
-- **output_i**: Output Integrated Loudness (LUFS) - the normalized loudness level
-- **output_tp**: Output True Peak (dBTP) - the highest peak after normalization
+- **output_i**: Output Integrated Loudness (LUFS) - the normalized loudness level (target: **-16 LUFS**)
+- **output_tp**: Output True Peak (dBTP) - the highest peak after normalization (target: -1.5 dBTP)
 - **output_lra**: Output Loudness Range (LU) - dynamic range after normalization
 - **target_offset**: How much gain was applied (in LU - Loudness Units)
 
-These measurements help you understand exactly what the normalization did to your audio and ensure it meets broadcast/streaming standards.
+**Loudness Targets:**
+
+- **-16 LUFS**: Optimized for YouTube, Spotify, and streaming platforms (~7 dB louder than broadcast standard)
+- **-1.5 dBTP**: True peak limit to prevent clipping
+- **11 LU**: Target loudness range for consistent dynamics
+
+**Platform Comparison:**
+
+- YouTube target: -14 LUFS (our -16 LUFS is very close)
+- Spotify target: -14 LUFS
+- Broadcast TV: -24 LUFS (much quieter)
+
+These measurements help you understand exactly what the normalization did to your audio and ensure it's competitive with other online content.
 
 ## Modes
 
